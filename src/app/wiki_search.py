@@ -3,6 +3,8 @@ import time
 from urllib.robotparser import RobotFileParser
 from collections import Counter
 import math
+from urllib.parse import urlparse
+from selenium.webdriver.common.by import By
 
 BASE_URL = "https://pl.wikipedia.org"
 START_URL = "https://pl.wikipedia.org/wiki/Wyszukiwarka_internetowa"
@@ -134,7 +136,6 @@ def make_driver():
 
 
 def fetch_robots(driver, base_url: str) -> str:
-    from selenium.webdriver.common.by import By
 
     driver.get(f"{base_url}/robots.txt")
     return driver.find_element(By.TAG_NAME, "body").text
@@ -156,11 +157,44 @@ def _page_title(driver, By) -> str:
             return head.strip()
     return driver.find_element(By.ID, "firstHeading").text.strip()
 
+def extract_article(driver) -> tuple[str, str]:
+
+
+    title = _page_title(driver, By)
+    paragraphs = driver.find_elements(By.CSS_SELECTOR, "#mw-content-text .mw-parser-output p")
+    texts = [t for t in (_element_text(p) for p in paragraphs) if t]
+    if not texts:
+        containers = driver.find_elements(By.CSS_SELECTOR, "#mw-content-text")
+        if containers:
+            texts = [t for t in [_element_text(containers[0])] if t]
+    return title, "\n".join(texts)
+
+
+def extract_links(driver) -> list[str]:
+    from selenium.webdriver.common.by import By
+
+    links = []
+    seen = set()
+    for a in driver.find_elements(By.CSS_SELECTOR, "#mw-content-text a[href]"):
+        href = a.get_attribute("href") or ""
+        parts = urlparse(href)
+        if not parts.path.startswith("/wiki/") or ":" in parts.path or parts.fragment or parts.query:
+            continue
+        if href not in seen:
+            seen.add(href)
+            links.append(href)
+    return links
+
+# --------------------------------------------------------------------- crawler
 
 # --------------------------------------------------------------------- terminal
 
 def main() -> None:
-    indexer = Indexer()
+    try:
+        driver = make_driver()
+    except Exception as exc:
+        print(f"Nie udało się uruchomić przeglądarki: {exc}")
+        return
 
 
 if __name__ == "__main__":
