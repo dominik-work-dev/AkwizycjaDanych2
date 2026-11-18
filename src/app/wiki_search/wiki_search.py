@@ -1,7 +1,7 @@
 import re
 import time
 from urllib.robotparser import RobotFileParser
-from collections import Counter
+from collections import Counter, deque
 import math
 from urllib.parse import urlparse
 from selenium.webdriver.common.by import By
@@ -77,7 +77,7 @@ class Indexer:
         total = len(tokens)
 
         self._tf[url] = {term: n / total for term, n in counts.items()} if total else {}
-        self._df.update(counts)  # każdy termin +1, bo counts ma unikalne klucze
+        self._df.update(counts.keys())
         return True
 
     def urls(self) -> list[str]:

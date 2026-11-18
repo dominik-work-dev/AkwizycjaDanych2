@@ -1,0 +1,27 @@
+# Projekt 2 - Wyszukiwarka pełnotekstowa dla stron www (Wikipedia).
+
+
+## Wymagania
+
+- Python 3.15
+- Biblioteki zawarte w requirements.txt
+
+
+## Instalacja
+
+```
+pip install -r requirements.txt
+```
+
+## Uruchamianie
+
+```
+python src/app/wiki_search.py
+```
+
+## Testy:
+
+```
+pip install pytest
+pytest src/app/tests/test_wiki_search.py -v
+```
