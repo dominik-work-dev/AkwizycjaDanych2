@@ -1,5 +1,5 @@
 # Projekt 2 - Wyszukiwarka pełnotekstowa dla stron www (Wikipedia).
-
+https://github.com/dominik-work-dev/AkwizycjaDanych2
 
 ## Wymagania
 
@@ -24,4 +24,5 @@ python src/app/wiki_search.py
 ```
 pip install pytest
 pytest src/app/tests/test_wiki_search.py -v
+pytest src/app/tests/test_pipeline.py -v
 ```
