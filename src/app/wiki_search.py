@@ -52,26 +52,30 @@ class RateLimiter:
 # --------------------------------------------------------------------- indekser
 
 class Indexer:
-    """ przechowuje TF dokumentów i DF terminów; IDF liczy się przy zapytaniu."""
-    def __init__(self):
+    def __init__(self) -> None:
         self._tf: dict[str, dict[str, float]] = {}
-        self._df: Counter = Counter()
+        self._df: Counter[str] = Counter()
 
     def __len__(self) -> int:
         return len(self._tf)
 
-    def is_indexed(self, url: str) -> bool:
+    def __contains__(self, url: str) -> bool:
         return url in self._tf
 
-    # dodanie strony gdy jej brakuje
+    def is_indexed(self, url: str) -> bool:
+        """Czy strona o podanym URL jest już w indeksie."""
+        return url in self
+
     def add(self, url: str, content: str) -> bool:
-        if url in self._tf:
+        if url in self:
             return False
+
         tokens = tokenize(content)
         counts = Counter(tokens)
         total = len(tokens)
-        self._tf[url] = {t: c / total for t, c in counts.items()} if total else {}
-        self._df.update(counts.keys())
+
+        self._tf[url] = {term: n / total for term, n in counts.items()} if total else {}
+        self._df.update(counts)  # każdy termin +1, bo counts ma unikalne klucze
         return True
 
     def urls(self) -> list[str]:
@@ -80,11 +84,11 @@ class Indexer:
     def term_frequencies(self, url: str) -> dict[str, float]:
         return self._tf[url]
 
-    def idf(self, term: str):
+    def idf(self, term: str) -> float | None:
         df = self._df.get(term)
         if not df:
             return None
-        return math.log((1 + len(self._tf)) / (1 + df)) + 1
+        return math.log((1 + len(self)) / (1 + df)) + 1
 
 
 # --------------------------------------------------------------------- wyszukiwarka
@@ -119,6 +123,38 @@ class SearchEngine:
 
 
 # --------------------------------------------------------------------- Selenium
+
+def make_driver():
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+
+    options = Options()
+    options.add_argument("--headless=new")
+    return webdriver.Chrome(options=options)
+
+
+def fetch_robots(driver, base_url: str) -> str:
+    from selenium.webdriver.common.by import By
+
+    driver.get(f"{base_url}/robots.txt")
+    return driver.find_element(By.TAG_NAME, "body").text
+
+
+def _element_text(element) -> str:
+    return (element.get_attribute("textContent") or element.text or "").strip()
+
+
+def _page_title(driver, By) -> str:
+    for element in driver.find_elements(By.CSS_SELECTOR, "#firstHeading .mw-page-title-main"):
+        text = _element_text(element)
+        if text:
+            return text
+    doc_title = getattr(driver, "title", None)
+    if isinstance(doc_title, str) and " – " in doc_title:
+        head, _, tail = doc_title.rpartition(" – ")
+        if "Wikipedia" in tail and head.strip():
+            return head.strip()
+    return driver.find_element(By.ID, "firstHeading").text.strip()
 
 
 # --------------------------------------------------------------------- terminal
