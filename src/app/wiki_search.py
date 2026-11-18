@@ -187,6 +187,41 @@ def extract_links(driver) -> list[str]:
 
 # --------------------------------------------------------------------- crawler
 
+class Crawler:
+    def __init__(
+        self,
+        driver,
+        indexer: Indexer,
+        limiter: RateLimiter,
+        allowed_domains=ALLOWED_DOMAINS,
+        max_depth: int = MAX_DEPTH,
+        max_links_per_page: int = MAX_LINKS_PER_PAGE,
+        max_pages: int = MAX_PAGES,
+    ):
+        if not 0 <= max_depth <= MAX_DEPTH_LIMIT:
+            raise ValueError(f"max_depth musi być w zakresie 0-{MAX_DEPTH_LIMIT}")
+        if max_pages < 1 or max_links_per_page < 1:
+            raise ValueError("max_pages i max_links_per_page muszą być dodatnie")
+        self.driver = driver
+        self.indexer = indexer
+        self.limiter = limiter
+        self.allowed_domains = tuple(allowed_domains)
+        self.max_depth = max_depth
+        self.max_links_per_page = max_links_per_page
+        self.max_pages = max_pages
+        self.titles: dict[str, str] = {}
+        self.depths: dict[str, int] = {}
+        self._robots_cache: dict[str, RobotFileParser] = {}
+
+    def _robots(self, url: str) -> RobotFileParser:
+        parts = urlparse(url)
+        base = f"{parts.scheme}://{parts.netloc}"
+        if base not in self._robots_cache:
+            self.limiter.wait()
+            rp = parse_robots(fetch_robots(self.driver, base))
+            self.limiter.raise_min_interval(rp.crawl_delay("*"))
+            self._robots_cache[base] = rp
+        return self._robots_cache[base]
 # --------------------------------------------------------------------- terminal
 
 def main() -> None:
@@ -195,7 +230,16 @@ def main() -> None:
     except Exception as exc:
         print(f"Nie udało się uruchomić przeglądarki: {exc}")
         return
-
+    indexer = Indexer()
+    crawler = Crawler(
+        driver,
+        indexer,
+        RateLimiter(MIN_INTERVAL),
+        allowed_domains=ALLOWED_DOMAINS,
+        max_depth=MAX_DEPTH,
+        max_links_per_page=MAX_LINKS_PER_PAGE,
+        max_pages=MAX_PAGES,
+    )
 
 if __name__ == "__main__":
     main()
