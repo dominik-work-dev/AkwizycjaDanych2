@@ -86,6 +86,41 @@ class Indexer:
             return None
         return math.log((1 + len(self._tf)) / (1 + df)) + 1
 
+
+# --------------------------------------------------------------------- wyszukiwarka
+class SearchEngine:
+    def __init__(self, indexer: Indexer):
+        self.indexer = indexer
+
+    def search_scored(self, query: str, top_k: int | None = None) -> list[tuple[str, float]]:
+        idx = self.indexer
+        q_tokens = [t for t in tokenize(query) if idx.idf(t) is not None]
+        if not q_tokens:
+            return []
+        counts = Counter(q_tokens)
+        q_vec = {t: (c / len(q_tokens)) * idx.idf(t) for t, c in counts.items()}
+        q_norm = math.sqrt(sum(w * w for w in q_vec.values()))
+        results = []
+        for url in idx.urls():
+            tf = idx.term_frequencies(url)
+            if not tf:
+                continue
+            d_norm = math.sqrt(sum((w * idx.idf(t)) ** 2 for t, w in tf.items()))
+            dot = sum(qw * tf.get(t, 0.0) * idx.idf(t) for t, qw in q_vec.items())
+            score = dot / (q_norm * d_norm)
+            if score > 0:
+                results.append((url, score))
+        results.sort(key=lambda r: r[1], reverse=True)
+        return results if top_k is None else results[:top_k]
+
+    def search(self, query: str, top_k: int | None = None) -> list[str]:
+        """Posortowana lista adresów."""
+        return [url for url, _ in self.search_scored(query, top_k)]
+
+
+# --------------------------------------------------------------------- Selenium
+
+
 # --------------------------------------------------------------------- terminal
 
 def main() -> None:
