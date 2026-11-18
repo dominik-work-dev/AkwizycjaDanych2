@@ -222,6 +222,54 @@ class Crawler:
             self.limiter.raise_min_interval(rp.crawl_delay("*"))
             self._robots_cache[base] = rp
         return self._robots_cache[base]
+
+    def _select_links(self, links: list[str], queued: set) -> list[str]:
+        selected = []
+        for link in links:
+            if len(selected) >= self.max_links_per_page:
+                break
+            if link in queued or urlparse(link).netloc not in self.allowed_domains:
+                continue
+            queued.add(link)
+            if not is_allowed(self._robots(link), link):
+                print(f"[POMINIĘTO robots.txt] {link}")
+                continue
+            selected.append(link)
+        return selected
+
+    def crawl(self, start_url: str) -> dict[str, int]:
+        """Przechodzi strony wszerz od start_url (poziom 0) do max_depth; zwraca {adres: poziom}."""
+        if urlparse(start_url).netloc not in self.allowed_domains:
+            raise ValueError(f"domena adresu startowego spoza dozwolonych: {self.allowed_domains}")
+        self.titles, self.depths = {}, {}
+        if not is_allowed(self._robots(start_url), start_url):
+            print(f"[POMINIĘTO robots.txt] {start_url}")
+            return self.depths
+
+        queue = deque([(start_url, 0)])
+        queued = {start_url}
+        downloads = 0
+        while queue and downloads < self.max_pages:
+            url, depth = queue.popleft()
+            self.limiter.wait()
+            downloads += 1
+            try:
+                self.driver.get(url)
+                title, text = extract_article(self.driver)
+                if not text.strip():
+                    print(f"[BŁĄD] {url} (pusta treść, tytuł: {title!r})")
+                    continue
+                links = extract_links(self.driver) if depth < self.max_depth else []
+            except Exception as exc:
+                print(f"[BŁĄD] {url}: {exc}")
+                continue
+            self.indexer.add(url, text)
+            self.titles[url] = title
+            self.depths[url] = depth
+            print(f"[poziom {depth}] [{len(self.depths)}/{self.max_pages}] {title}")
+            for link in self._select_links(links, queued):
+                queue.append((link, depth + 1))
+        return self.depths
 # --------------------------------------------------------------------- terminal
 
 def main() -> None:
@@ -240,6 +288,33 @@ def main() -> None:
         max_links_per_page=MAX_LINKS_PER_PAGE,
         max_pages=MAX_PAGES,
     )
+    try:
+        crawler.crawl(START_URL)
+    except Exception as exc:
+        print(f"Nie udało się pobrać stron: {exc}")
+        return
+    finally:
+        driver.quit()
+    if len(indexer) == 0:
+        print("Nie zaindeksowano żadnych stron.")
+        return
+
+    engine = SearchEngine(indexer)
+    print(f"\nZaindeksowano {len(indexer)} stron.")
+    while True:
+        try:
+            query = input("Zapytanie (pusta linia = wyjście): ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if query == "":
+            break
+        results = engine.search_scored(query, top_k=5)
+        if not results:
+            print("Brak wyników.")
+            continue
+        for url, score in results:
+            print(f"{crawler.titles.get(url, url)} | {url} | {score:.4f}")
 
 if __name__ == "__main__":
     main()
