@@ -17,6 +17,7 @@ pip install -r requirements.txt
 
 ```
 python src/app/wiki_search/wiki_search.py
+python src/app/wiki_search/wiki_search_ui.py
 ```
 
 ## Testy:
