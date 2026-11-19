@@ -16,7 +16,7 @@ pip install -r requirements.txt
 ## Uruchamianie
 
 ```
-python src/app/wiki_search.py
+python src/app/wiki_search/wiki_search.py
 ```
 
 ## Testy:
